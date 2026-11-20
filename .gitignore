@@ -1,0 +1,18 @@
+# Secrets and signing keys
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore.p12
+openssl.cnf
+
+# F-Droid build artifacts & temp data
+repo/
+archive/
+stats/
+tmp/
+.fdroid/
+
+# Environment / local artifacts
+.direnv/
+.DS_Store
