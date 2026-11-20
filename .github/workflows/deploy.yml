@@ -25,7 +25,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+
+      - name: Restore commit modification times
+        uses: chetan/git-restore-mtime-action@v2
 
       - name: Install and cache fdroidserver
         uses: gerlero/apt-install@v1
@@ -52,7 +55,7 @@ jobs:
         run: |
           chmod 600 config.yml
           mkdir -p repo archive
-          fdroid update -v --create-metadata
+          fdroid update -v --create-metadata --use-date-from-apk --use-date-from-file
 
       - name: Prepare site directory
         run: |
