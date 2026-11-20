@@ -55,7 +55,7 @@ jobs:
         run: |
           chmod 600 config.yml
           mkdir -p repo archive
-          fdroid update -v --create-metadata --use-date-from-apk --use-date-from-file
+          fdroid update -v --create-metadata --use-date-from-apk
 
       - name: Prepare site directory
         run: |
