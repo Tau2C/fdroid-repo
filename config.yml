@@ -13,5 +13,5 @@ archive_description: "Archive of older APK versions."
 # Signing settings
 keystore: "keystore.p12"
 repo_keyalias: "fdroid"
-keystorepass: "env:FDROID_KEY_STORE_PASS"
-keypass: "env:FDROID_KEY_PASS"
+keystorepass: {env: FDROID_KEY_STORE_PASS}
+keypass: {env: FDROID_KEY_PASS}
