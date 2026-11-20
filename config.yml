@@ -1,0 +1,17 @@
+# F-Droid repository configuration
+# Repository address on GitHub Pages:
+repo_url: "https://Tau2C.github.io/fdroid-repo/fdroid/repo"
+repo_name: "Tau2C Personal F-Droid Repo"
+repo_icon: "fdroid-icon.png"
+repo_description: "Personal F-Droid repository hosted on GitHub Pages."
+
+# Archive repository settings (optional)
+archive_url: "https://Tau2C.github.io/fdroid-repo/fdroid/archive"
+archive_name: "Tau2C Personal F-Droid Archive"
+archive_description: "Archive of older APK versions."
+
+# Signing settings
+keystore: "keystore.p12"
+repo_keyalias: "fdroid"
+keystorepass: "env:FDROID_KEY_STORE_PASS"
+keypass: "env:FDROID_KEY_PASS"
