@@ -27,10 +27,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install fdroidserver
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fdroidserver
+      - name: Cache and install fdroidserver
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: fdroidserver
+          version: 1.0
 
       - name: Decode keystore
         env:
