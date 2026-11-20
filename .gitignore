@@ -7,7 +7,6 @@ keystore.p12
 openssl.cnf
 
 # F-Droid build artifacts & temp data
-repo/
 archive/
 stats/
 tmp/
