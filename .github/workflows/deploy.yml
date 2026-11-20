@@ -49,8 +49,9 @@ jobs:
           FDROID_KEY_STORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
           FDROID_KEY_PASS: ${{ secrets.FDROID_KEY_PASSWORD }}
         run: |
+          chmod 600 config.yml
           mkdir -p repo archive
-          fdroid update --create-metadata
+          fdroid update -v --create-metadata
 
       - name: Prepare site directory
         run: |
