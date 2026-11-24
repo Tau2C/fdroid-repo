@@ -71,7 +71,24 @@ for (( i=0; i<len; i++ )); do
   if [ -n "$package_id" ] && [ -n "$latest_stable_tag" ]; then
     clean_version="${latest_stable_tag#v}"
     meta_file="$META_DIR/$package_id.yml"
-    echo "Updating metadata for $package_id: CurrentVersion=$clean_version (from stable tag $latest_stable_tag)..."
+
+    # Search for an APK in DEST_DIR matching the stable tag
+    stable_apk=$(find "$DEST_DIR" -maxdepth 1 -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" | head -n 1 || true)
+
+    version_code=""
+    if [ -n "$stable_apk" ] && [ -f "$stable_apk" ]; then
+      # Extract versionCode using python3 + androguard (installed with fdroidserver)
+      version_code=$(python3 -c "
+try:
+    from androguard.core.bytecodes.apk import APK
+    apk = APK('$stable_apk')
+    print(apk.get_androidversion_code() or '')
+except Exception:
+    pass
+" 2>/dev/null || true)
+    fi
+
+    echo "Updating metadata for $package_id: CurrentVersion=$clean_version, CurrentVersionCode=${version_code:-none} (from stable tag $latest_stable_tag)..."
     if [ -f "$meta_file" ]; then
       # Update or append CurrentVersion in existing metadata file
       if grep -q "^CurrentVersion:" "$meta_file"; then
@@ -79,11 +96,21 @@ for (( i=0; i<len; i++ )); do
       else
         echo "CurrentVersion: $clean_version" >> "$meta_file"
       fi
+
+      # Update or append CurrentVersionCode if detected
+      if [ -n "$version_code" ]; then
+        if grep -q "^CurrentVersionCode:" "$meta_file"; then
+          sed -i "s/^CurrentVersionCode:.*/CurrentVersionCode: $version_code/" "$meta_file"
+        else
+          echo "CurrentVersionCode: $version_code" >> "$meta_file"
+        fi
+      fi
     else
       cat << EOF > "$meta_file"
 AutoUpdateMode: None
 UpdateCheckMode: None
 CurrentVersion: $clean_version
+${version_code:+CurrentVersionCode: $version_code}
 EOF
     fi
   fi
