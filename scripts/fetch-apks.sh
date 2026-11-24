@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i bash -p bash jq curl coreutils
+#!nix-shell -i bash -p bash jq curl coreutils gh
 set -euo pipefail
 
 APPS_CONFIG="${1:-apps.json}"
@@ -18,31 +18,42 @@ for (( i=0; i<len; i++ )); do
   repo=$(jq -r ".[$i].repo" "$APPS_CONFIG")
   include_prerelease=$(jq -r ".[$i].include_prerelease" "$APPS_CONFIG")
 
+  # Resolve token: check JSON map REPO_TOKENS, fallback to DEFAULT_GITHUB_TOKEN, fallback to GITHUB_TOKEN
+  token=$(echo "${REPO_TOKENS:-{}}" | jq -r --arg r "$repo" '.[$r] // empty')
+  token="${token:-${DEFAULT_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}}"
+
   echo "Fetching releases for $repo (include_prerelease=$include_prerelease)..."
 
-  # Query GitHub API for releases
-  curl -s -H "Accept: application/vnd.github.v3+json" \
-    ${GITHUB_TOKEN:+-H "Authorization: token $GITHUB_TOKEN"} \
-    "https://api.github.com/repos/$repo/releases?per_page=30" > /tmp/releases.json
+  # Query releases using GitHub CLI or API with resolved token
+  releases_json=$(GH_TOKEN="$token" gh release list -R "$repo" --limit 30 --json tagName,isPrerelease,publishedAt)
 
-  # Filter releases
-  if [ "$include_prerelease" = "true" ]; then
-    filter='.'
-  else
-    filter='map(select(.prerelease == false))'
-  fi
+  echo "$releases_json" | jq -c '.[]' | while read -r item; do
+    tag=$(echo "$item" | jq -r '.tagName')
+    prerelease=$(echo "$item" | jq -r '.isPrerelease')
+    published_at=$(echo "$item" | jq -r '.publishedAt')
 
-  # Extract APK assets
-  jq -r "$filter | .[] | .published_at as \$pub | .assets[] | select(.name | endswith(\".apk\")) | \"\(.browser_download_url) \(\$pub) \(.name)\"" /tmp/releases.json | while read -r url published_at name; do
-    target_file="$DEST_DIR/$name"
-    if [ ! -f "$target_file" ]; then
-      echo "Downloading $name from $url..."
-      curl -sL -o "$target_file" "$url"
-      # Set mtime to match release date
-      touch -d "$published_at" "$target_file"
-    else
-      echo "File $name already exists, skipping."
+    if [ "$prerelease" = "true" ] && [ "$include_prerelease" != "true" ]; then
+      continue
     fi
+
+    # Download *.apk files for this release tag
+    tmp_dl=$(mktemp -d)
+    if GH_TOKEN="$token" gh release download "$tag" -R "$repo" -p "*.apk" -D "$tmp_dl" 2>/dev/null; then
+      for apk in "$tmp_dl"/*.apk; do
+        if [ -f "$apk" ]; then
+          base_name=$(basename "$apk")
+          target_file="$DEST_DIR/$base_name"
+          if [ ! -f "$target_file" ]; then
+            echo "Downloaded $base_name ($tag)"
+            mv "$apk" "$target_file"
+            touch -d "$published_at" "$target_file"
+          else
+            echo "File $base_name already exists, skipping."
+          fi
+        fi
+      done
+    fi
+    rm -rf "$tmp_dl"
   done
 done
 
