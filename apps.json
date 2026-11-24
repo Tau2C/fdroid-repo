@@ -8,5 +8,14 @@
     "repo": "Tau2C/pds-android",
     "include_prerelease": true,
     "package_id": "top.tau2c.pds.core"
-  }
+  },
+  {
+    "repo": "Tau2C/pds-osp",
+    "include_prerelease": true,
+    "package_id": "top.tau2c.pds.osp"
+  },
+  {
+    "repo": "Tau2C/wallet",
+    "include_prerelease": true,
+    "package_id": "top.tau2c.wallet"
 ]
