@@ -7,7 +7,11 @@ on:
     paths:
       - 'repo/**'
       - 'config.yml'
+      - 'apps.json'
+      - 'metadata/**'
   workflow_dispatch:
+  repository_dispatch:
+    types: [new-release]
 
 permissions:
   contents: write
@@ -47,6 +51,13 @@ jobs:
             echo "::error::Secret FDROID_KEYSTORE_BASE64 is not set."
             exit 1
           fi
+
+      - name: Fetch APKs from GitHub Releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/fetch-apks.sh
+          ./scripts/fetch-apks.sh apps.json repo
 
       - name: Update repository index
         env:
