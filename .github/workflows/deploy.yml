@@ -54,7 +54,8 @@ jobs:
 
       - name: Fetch APKs from GitHub Releases
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_TOKENS: ${{ secrets.REPO_TOKENS }}
         run: |
           chmod +x scripts/fetch-apks.sh
           ./scripts/fetch-apks.sh apps.json repo
