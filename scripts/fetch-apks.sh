@@ -18,7 +18,13 @@ for (( i=0; i<len; i++ )); do
   include_prerelease=$(jq -r ".[$i].include_prerelease" "$APPS_CONFIG")
 
   # Resolve token: check JSON map REPO_TOKENS, fallback to DEFAULT_GITHUB_TOKEN, fallback to GITHUB_TOKEN
-  token=$(echo "${REPO_TOKENS:-{}}" | jq -r --arg r "$repo" '.[$r] // empty')
+  token=$(REPO_TOKENS="${REPO_TOKENS:-}" jq -nr '
+    try (
+      (env.REPO_TOKENS | fromjson) as $m |
+      $ARGS.named.repo as $r |
+      ($m[$r] // empty)
+    ) catch empty
+  ' --arg repo "$repo" || true)
   token="${token:-${DEFAULT_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}}"
 
   echo "Fetching releases for $repo (include_prerelease=$include_prerelease)..."
