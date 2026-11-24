@@ -1,0 +1,12 @@
+[
+  {
+    "repo": "Tau2C/Receipts",
+    "include_prerelease": true,
+    "package_id": "top.tau2c.receipts.app"
+  },
+  {
+    "repo": "Tau2C/pds-android",
+    "include_prerelease": true,
+    "package_id": "top.tau2c.pds.core"
+  }
+]
