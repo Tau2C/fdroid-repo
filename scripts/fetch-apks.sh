@@ -3,18 +3,20 @@ set -euo pipefail
 
 APPS_CONFIG="${1:-apps.json}"
 DEST_DIR="${2:-repo}"
+META_DIR="${3:-metadata}"
 
 if [ ! -f "$APPS_CONFIG" ]; then
   echo "Configuration file $APPS_CONFIG does not exist."
   exit 1
 fi
 
-mkdir -p "$DEST_DIR"
+mkdir -p "$DEST_DIR" "$META_DIR"
 
 len=$(jq '. | length' "$APPS_CONFIG")
 
 for (( i=0; i<len; i++ )); do
   repo=$(jq -r ".[$i].repo" "$APPS_CONFIG")
+  package_id=$(jq -r ".[$i].package_id // empty" "$APPS_CONFIG")
   include_prerelease=$(jq -r ".[$i].include_prerelease" "$APPS_CONFIG")
 
   # Resolve token: check JSON map REPO_TOKENS, fallback to DEFAULT_GITHUB_TOKEN, fallback to GITHUB_TOKEN
@@ -29,9 +31,13 @@ for (( i=0; i<len; i++ )); do
 
   echo "Fetching releases for $repo (include_prerelease=$include_prerelease)..."
 
-  # Query releases using GitHub CLI or API with resolved token
+  # Query releases using GitHub CLI with resolved token
   releases_json=$(GH_TOKEN="$token" gh release list -R "$repo" --limit 30 --json tagName,isPrerelease,publishedAt)
 
+  # Find latest stable (non-prerelease) release tag
+  latest_stable_tag=$(echo "$releases_json" | jq -r 'map(select(.isPrerelease == false)) | .[0].tagName // empty')
+
+  # Download APKs
   echo "$releases_json" | jq -c '.[]' | while read -r item; do
     tag=$(echo "$item" | jq -r '.tagName')
     prerelease=$(echo "$item" | jq -r '.isPrerelease')
@@ -60,6 +66,27 @@ for (( i=0; i<len; i++ )); do
     fi
     rm -rf "$tmp_dl"
   done
+
+  # Auto-generate metadata if package_id and stable tag exist
+  if [ -n "$package_id" ] && [ -n "$latest_stable_tag" ]; then
+    clean_version="${latest_stable_tag#v}"
+    meta_file="$META_DIR/$package_id.yml"
+    echo "Updating metadata for $package_id: CurrentVersion=$clean_version (from stable tag $latest_stable_tag)..."
+    if [ -f "$meta_file" ]; then
+      # Update or append CurrentVersion in existing metadata file
+      if grep -q "^CurrentVersion:" "$meta_file"; then
+        sed -i "s/^CurrentVersion:.*/CurrentVersion: $clean_version/" "$meta_file"
+      else
+        echo "CurrentVersion: $clean_version" >> "$meta_file"
+      fi
+    else
+      cat << EOF > "$meta_file"
+AutoUpdateMode: None
+UpdateCheckMode: None
+CurrentVersion: $clean_version
+EOF
+    fi
+  fi
 done
 
-echo "APK synchronization complete."
+echo "APK and metadata synchronization complete."
