@@ -1,5 +1,4 @@
-#!/usr/bin/env nix-shell
-#!nix-shell -i bash -p bash jq curl coreutils gh
+#!/usr/bin/env bash
 set -euo pipefail
 
 APPS_CONFIG="${1:-apps.json}"
