@@ -37,6 +37,8 @@ for (( i=0; i<len; i++ )); do
   # Find latest stable (non-prerelease) release tag
   latest_stable_tag=$(echo "$releases_json" | jq -r 'map(select(.isPrerelease == false)) | .[0].tagName // empty')
 
+  stable_apk=""
+
   # Download APKs
   echo "$releases_json" | jq -c '.[]' | while read -r item; do
     tag=$(echo "$item" | jq -r '.tagName')
@@ -68,6 +70,10 @@ for (( i=0; i<len; i++ )); do
           else
             echo "File $base_name already exists, skipping."
           fi
+
+          if [ "$tag" = "$latest_stable_tag" ]; then
+            echo "$target_file" > "/tmp/stable_${repo_slug}.txt"
+          fi
         fi
       done
     fi
@@ -79,54 +85,44 @@ for (( i=0; i<len; i++ )); do
     clean_version="${latest_stable_tag#v}"
     meta_file="$META_DIR/$package_id.yml"
 
-    # Search for an APK in DEST_DIR matching the stable tag
     repo_slug="${repo//\//_}"
-    stable_apk=$(find "$DEST_DIR" -maxdepth 1 \( -name "*${repo_slug}*${latest_stable_tag}*.apk" -o -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" \) | head -n 1 || true)
+    stable_apk_record="/tmp/stable_${repo_slug}.txt"
+    if [ -f "$stable_apk_record" ]; then
+      stable_apk=$(cat "$stable_apk_record" | head -n 1 || true)
+    else
+      stable_apk=$(find "$DEST_DIR" -maxdepth 1 -name "*${clean_version}*.apk" | head -n 1 || true)
+    fi
 
     version_code=""
     if [ -n "$stable_apk" ] && [ -f "$stable_apk" ]; then
-      # Extract versionCode using fdroidserver built-in scanner (always installed and accurate)
-      version_code=$(python3 -c "
-import sys
+      # 1. Primary: Use aapt dump badging (rock solid on Android APKs)
+      if command -v aapt >/dev/null 2>&1; then
+        version_code=$(aapt dump badging "$stable_apk" 2>/dev/null | grep -Po "versionCode='\K[^']+" || true)
+      fi
+
+      # 2. Secondary fallback: fdroidserver.update scan_apk
+      if [ -z "$version_code" ]; then
+        version_code=$(python3 -c "
 try:
     from fdroidserver.update import scan_apk
-    apk_info, _ = scan_apk('$stable_apk')
+    apk_info = scan_apk('$stable_apk')
     print(apk_info.get('versionCode') or '')
-    sys.exit(0)
-except Exception:
-    pass
-
-# Fallback: parse manifest
-try:
-    import zipfile, struct
-    with zipfile.ZipFile('$stable_apk') as z:
-        data = z.read('AndroidManifest.xml')
-    idx = data.find(b'versionCode')
-    if idx != -1:
-        pos = idx
-        while pos < min(len(data), idx + 200):
-            val_type = data[pos] if pos < len(data) else 0
-            if val_type == 0x10 and pos + 5 <= len(data):
-                full_val = struct.unpack('<I', data[pos+1:pos+5])[0]
-                if 0 < full_val < 100000000:
-                    print(full_val)
-                    sys.exit(0)
-            pos += 1
 except Exception:
     pass
 " 2>/dev/null || true)
+      fi
     fi
 
     echo "Updating metadata for $package_id: CurrentVersion=$clean_version, CurrentVersionCode=${version_code:-none} (from stable tag $latest_stable_tag)..."
     if [ -f "$meta_file" ]; then
-      # Update or append CurrentVersion in existing metadata file
+      # Update or append CurrentVersion
       if grep -q "^CurrentVersion:" "$meta_file"; then
         sed -i "s/^CurrentVersion:.*/CurrentVersion: $clean_version/" "$meta_file"
       else
         echo "CurrentVersion: $clean_version" >> "$meta_file"
       fi
 
-      # Update or append CurrentVersionCode if detected
+      # Update or append CurrentVersionCode
       if [ -n "$version_code" ]; then
         if grep -q "^CurrentVersionCode:" "$meta_file"; then
           sed -i "s/^CurrentVersionCode:.*/CurrentVersionCode: $version_code/" "$meta_file"

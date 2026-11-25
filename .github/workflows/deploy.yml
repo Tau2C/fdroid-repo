@@ -40,7 +40,7 @@ jobs:
       - name: Install and cache fdroidserver
         uses: gerlero/apt-install@v1
         with:
-          packages: fdroidserver
+          packages: fdroidserver aapt
           cache: true
 
       - name: Decode keystore
