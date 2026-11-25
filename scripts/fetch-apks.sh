@@ -81,43 +81,37 @@ for (( i=0; i<len; i++ )); do
 
     # Search for an APK in DEST_DIR matching the stable tag
     repo_slug="${repo//\//_}"
-    stable_apk=$(find "$DEST_DIR" -maxdepth 1 \( -name "*${repo_slug}*${tag}*.apk" -o -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" \) | head -n 1 || true)
+    stable_apk=$(find "$DEST_DIR" -maxdepth 1 \( -name "*${repo_slug}*${latest_stable_tag}*.apk" -o -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" \) | head -n 1 || true)
 
     version_code=""
     if [ -n "$stable_apk" ] && [ -f "$stable_apk" ]; then
-      # Extract versionCode via pure python AXML parser from APK zip archive
+      # Extract versionCode using fdroidserver built-in scanner (always installed and accurate)
       version_code=$(python3 -c "
-import zipfile, struct, sys
+import sys
 try:
+    from fdroidserver.update import scan_apk
+    apk_info, _ = scan_apk('$stable_apk')
+    print(apk_info.get('versionCode') or '')
+    sys.exit(0)
+except Exception:
+    pass
+
+# Fallback: parse manifest
+try:
+    import zipfile, struct
     with zipfile.ZipFile('$stable_apk') as z:
         data = z.read('AndroidManifest.xml')
-    # AXML Parser to extract android:versionCode
     idx = data.find(b'versionCode')
     if idx != -1:
-        # Search nearby for attribute value
         pos = idx
         while pos < min(len(data), idx + 200):
-            # Android resource int attribute type is 0x10 (TYPE_INT_DEC)
-            val_type, val_data = struct.unpack('<BH', data[pos:pos+3]) if pos+3 <= len(data) else (0, 0)
-            if val_type == 0x10:
+            val_type = data[pos] if pos < len(data) else 0
+            if val_type == 0x10 and pos + 5 <= len(data):
                 full_val = struct.unpack('<I', data[pos+1:pos+5])[0]
                 if 0 < full_val < 100000000:
                     print(full_val)
                     sys.exit(0)
             pos += 1
-except Exception:
-    pass
-# Fallback to aapt/fdroidserver tools if available
-import subprocess
-try:
-    out = subprocess.check_output(['aapt', 'dump', 'badging', '$stable_apk'], text=True)
-    for line in out.splitlines():
-        if 'versionCode=' in line:
-            import re
-            m = re.search(r\"versionCode='([^']+)'\", line)
-            if m:
-                print(m.group(1))
-                sys.exit(0)
 except Exception:
     pass
 " 2>/dev/null || true)
