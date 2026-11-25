@@ -52,7 +52,14 @@ for (( i=0; i<len; i++ )); do
     if GH_TOKEN="$token" gh release download "$tag" -R "$repo" -p "*.apk" -D "$tmp_dl" 2>/dev/null; then
       for apk in "$tmp_dl"/*.apk; do
         if [ -f "$apk" ]; then
-          base_name=$(basename "$apk")
+          raw_name=$(basename "$apk")
+          # Avoid collision when multiple repos publish 'app-release.apk'
+          repo_slug="${repo//\//_}"
+          if [[ "$raw_name" == "app-release.apk" || "$raw_name" == "release.apk" || "$raw_name" == "app.apk" ]]; then
+            base_name="${repo_slug}-${tag}-${raw_name}"
+          else
+            base_name="$raw_name"
+          fi
           target_file="$DEST_DIR/$base_name"
           if [ ! -f "$target_file" ]; then
             echo "Downloaded $base_name ($tag)"
@@ -73,16 +80,44 @@ for (( i=0; i<len; i++ )); do
     meta_file="$META_DIR/$package_id.yml"
 
     # Search for an APK in DEST_DIR matching the stable tag
-    stable_apk=$(find "$DEST_DIR" -maxdepth 1 -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" | head -n 1 || true)
+    repo_slug="${repo//\//_}"
+    stable_apk=$(find "$DEST_DIR" -maxdepth 1 \( -name "*${repo_slug}*${tag}*.apk" -o -name "*${clean_version}*.apk" -o -name "*${latest_stable_tag}*.apk" \) | head -n 1 || true)
 
     version_code=""
     if [ -n "$stable_apk" ] && [ -f "$stable_apk" ]; then
-      # Extract versionCode using python3 + androguard (installed with fdroidserver)
+      # Extract versionCode via pure python AXML parser from APK zip archive
       version_code=$(python3 -c "
+import zipfile, struct, sys
 try:
-    from androguard.core.bytecodes.apk import APK
-    apk = APK('$stable_apk')
-    print(apk.get_androidversion_code() or '')
+    with zipfile.ZipFile('$stable_apk') as z:
+        data = z.read('AndroidManifest.xml')
+    # AXML Parser to extract android:versionCode
+    idx = data.find(b'versionCode')
+    if idx != -1:
+        # Search nearby for attribute value
+        pos = idx
+        while pos < min(len(data), idx + 200):
+            # Android resource int attribute type is 0x10 (TYPE_INT_DEC)
+            val_type, val_data = struct.unpack('<BH', data[pos:pos+3]) if pos+3 <= len(data) else (0, 0)
+            if val_type == 0x10:
+                full_val = struct.unpack('<I', data[pos+1:pos+5])[0]
+                if 0 < full_val < 100000000:
+                    print(full_val)
+                    sys.exit(0)
+            pos += 1
+except Exception:
+    pass
+# Fallback to aapt/fdroidserver tools if available
+import subprocess
+try:
+    out = subprocess.check_output(['aapt', 'dump', 'badging', '$stable_apk'], text=True)
+    for line in out.splitlines():
+        if 'versionCode=' in line:
+            import re
+            m = re.search(r\"versionCode='([^']+)'\", line)
+            if m:
+                print(m.group(1))
+                sys.exit(0)
 except Exception:
     pass
 " 2>/dev/null || true)
